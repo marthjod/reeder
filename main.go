@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	rss "github.com/jteeuwen/go-pkg-rss"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
@@ -10,25 +13,40 @@ import (
 	"sync"
 )
 
+type Feed struct {
+	Name string
+	Url  string
+}
+
 func main() {
 
 	var (
-		err   error
-		feeds map[string]*rss.Feed
-		river []*rss.Feed
+		err       error
+		feedInfo  []Feed
+		feeds     map[string]*rss.Feed
+		river     []*rss.Feed
+		feedsFile string
+		urlPath   string
+		port      string
 	)
 
-	feeds = map[string]*rss.Feed{
-		"Fefe":     rss.New(2, true, chanHandler, itemHandler),
-		"HN":       rss.New(2, true, chanHandler, itemHandler),
-		"Slashdot": rss.New(2, true, chanHandler, itemHandler),
+	flag.StringVar(&feedsFile, "feeds", "none.json", `JSON file containing feed info [ { "name": "Feed 1", "url": "http://..." } ]`)
+	flag.StringVar(&urlPath, "urlpath", "/", `URL path for output`)
+	flag.StringVar(&port, "port", "4242", "Port number for this instance")
+	flag.Parse()
+
+	feedInfo, err = readFeedsFromJSON(feedsFile)
+	if err != nil {
+		os.Exit(1)
 	}
 
-	feeds["HN"].Url = "https://news.ycombinator.com/rss"
-	feeds["Fefe"].Url = "https://blog.fefe.de/rss.xml?html"
-	feeds["Slashdot"].Url = "http://rss.slashdot.org/Slashdot/slashdot"
+	feeds = make(map[string]*rss.Feed, len(feedInfo))
+	for i := range feedInfo {
+		feeds[feedInfo[i].Name] = rss.New(2, true, chanHandler, itemHandler)
+		feeds[feedInfo[i].Name].Url = feedInfo[i].Url
+	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(urlPath, func(w http.ResponseWriter, r *http.Request) {
 
 		var (
 			s          string
@@ -51,13 +69,15 @@ func main() {
 				stripFuncs = append(stripFuncs, stripHN)
 			}
 
-			c = f.Channels[0]
+			if len(f.Channels) > 0 {
+				c = f.Channels[0]
 
-			for k := 0; k < len(c.Items); k++ {
-				s += "<h3>" + c.Items[k].Title + "</h3>\n"
-				s += c.Items[k].Description + "\n"
-				for f := 0; f < len(stripFuncs); f++ {
-					s = stripFuncs[f](s)
+				for k := 0; k < len(c.Items); k++ {
+					s += "<h3>" + c.Items[k].Title + "</h3>\n"
+					s += c.Items[k].Description + "\n"
+					for f := 0; f < len(stripFuncs); f++ {
+						s = stripFuncs[f](s)
+					}
 				}
 			}
 		}
@@ -69,7 +89,8 @@ func main() {
 		}
 	})
 
-	err = http.ListenAndServe(":4242", nil)
+	fmt.Printf("Serving on :%s%s\n", port, urlPath)
+	err = http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -95,6 +116,26 @@ func FeedRiver(feeds map[string]*rss.Feed) []*rss.Feed {
 
 	w.Wait()
 	return river
+}
+
+func readFeedsFromJSON(path string) ([]Feed, error) {
+	var (
+		b   []byte
+		f   []Feed
+		err error
+	)
+
+	b, err = ioutil.ReadFile(path)
+	if err != nil {
+		fmt.Printf("I/O error: %v\n", err)
+		os.Exit(1)
+	}
+	err = json.Unmarshal(b, &f)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return f, err
 }
 
 func chanHandler(feed *rss.Feed, newchannels []*rss.Channel) {

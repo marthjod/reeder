@@ -1,0 +1,14 @@
+[
+    {
+        "name": "Fefe",
+        "url": "https://blog.fefe.de/rss.xml?html"
+    },
+    {
+        "name": "Slashdot",
+        "url": "http://rss.slashdot.org/Slashdot/slashdot"
+    },
+    {
+        "name": "HN",
+        "url": "https://news.ycombinator.com/rss"
+    }
+]
