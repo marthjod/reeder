@@ -183,7 +183,7 @@ func stripTags(content string) string {
 		tags    []string
 	)
 
-	tags = []string{"img", "br", "a", "iframe"}
+	tags = []string{"img", "br", "iframe"}
 
 	c = content
 	for i := 0; i < len(tags); i++ {
